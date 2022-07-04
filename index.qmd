@@ -1,0 +1,1623 @@
+---
+title: "Iterating well with purrr"
+author: "Shannon Pileggi"
+footer:  "[Iterating well with purrr](https://github.com/rstats-wtf/wtf-purrr-slides)"
+logo: "img/wtf-logo-square-transparent.png"
+format: 
+  revealjs: 
+    theme: [night, slides.scss]
+    highlight-style: a11y
+    transition: fade
+    slide-number: true
+    chalkboard: true
+editor: visual
+execute:
+  freeze: auto
+---
+
+
+# Introduction
+
+```{r}
+library(tidyverse)
+library(countdown)
+library(repurrrsive)
+library(gapminder)
+```
+
+```{r font-awesome-color}
+# fill for font awesome icons
+fa_fill <- "#C7B41D"
+```
+
+## Licensing
+
+<br>
+
+This work is licensed under a [Creative Commons Attribution-ShareAlike 4.0 International License](https://creativecommons.org/licenses/by-sa/4.0/) (CC BY-SA4.0).
+
+## Checklist
+
+<br>
+
+`r fontawesome::fa("check", fill = fa_fill)` R installed?
+Pretty recent?
+
+     Current version 4.2.0
+
+`r fontawesome::fa("check", fill = fa_fill)` RStudio installed?
+
+     I'm on 2022.02.3+492
+
+`r fontawesome::fa("check", fill = fa_fill)` Have these packages?
+
+     `tidyverse` (includes `purrr`); `repurrrsive`
+
+## Additional resources {.smaller}
+
+-   Jenny Bryan purrr tutorial<br> <https://jennybc.github.io/purrr-tutorial/>
+
+-   Charlotte Wickham purrr tutorial<br> <https://github.com/cwickham/purrr-tutorial>
+
+-   Jenny Bryan row-oriented workflows workshop<br> <https://github.com/jennybc/row-oriented-workflows>
+
+-   Advanced R by Hadley Wickham, Ch 9 Functionals<br> <https://adv-r.hadley.nz/functionals.html>
+
+-   The Joy of Functional Programming (for Data Science)<br> webinar by Hadley Wickham <br> <https://www.youtube.com/watch?v=bzUmK0Y07ck>
+
+# Syntax aside
+
+## Pipes
+
+-   2014+ magrittr pipe `%>%`
+
+-   2021+ (R $\geq$ 4.1.0) native R pipe `|>`
+
+2022 Isabella Velásquez Understanding the native R pipe \|\> <https://ivelasq.rbind.io/blog/understanding-the-r-pipe/>
+
+. . .
+
+<brshort>
+
+::: columns
+::: {.column width="50%"}
+```{r echo=TRUE, eval=FALSE}
+whatever(arg1, arg2, arg3, ...)
+
+arg1 |>  
+  whatever(arg2, arg3)
+```
+:::
+
+::: {.column width="5%"}
+:::
+
+::: {.column width="45%"}
+```{r echo=TRUE, eval=FALSE}
+mean(0:10)
+
+0:10 |> 
+  mean()
+```
+:::
+:::
+
+::: footer
+Change `CTRL + Shift + M` shortcut to native pipe:
+
+`Tools -> Global Options -> Code ->`
+
+   `Editing -> check Use Native Pipe Operator`
+:::
+
+## R for Data Science: Ch 18 Pipes
+
+![](img/foo-foo.png)
+
+::: footer
+<https://r4ds.had.co.nz/pipes.html#pipes>
+:::
+
+## Namespacing
+
+`dplyr::select()`
+
+-   tells R explicitly to use the function `select` from the package `dplyr`
+
+-   can help to avoid name conflicts (e.g., `MASS::select()`)
+
+-   does not require `library(dplyr)`
+
+. . .
+
+::: columns
+::: {.column width="45%"}
+```{r echo=TRUE, eval=FALSE}
+library(dplyr)
+
+select(mtcars, mpg, cyl) 
+
+mtcars |>  
+  select(mpg, cyl) 
+```
+:::
+
+::: {.column width="5%"}
+:::
+
+::: {.column width="50%"}
+```{r echo=TRUE, eval=FALSE}
+# library(dplyr) not needed
+
+dplyr::select(mtcars, mpg, cyl) 
+
+mtcars |>  
+  dplyr::select(mpg, cyl) 
+```
+:::
+:::
+
+# Iterating without purrr
+
+## Gapminder example
+
+```{r, echo = TRUE}
+library(gapminder)
+library(tidyverse)
+gapminder
+```
+
+::: footer
+Hans Rosling discusses Gapminder data<br> <https://www.youtube.com/watch?v=hVimVzgtD6w>
+:::
+
+## Gapminder life expectancy
+
+```{r}
+gapminder |>  
+  ggplot(aes(x = year, y = lifeExp)) +
+  geom_line(aes(group = country), color = "white") +
+  facet_wrap(~ continent, ncol = 5) +
+  stat_summary(geom = "line", fun = mean, color = "#C7B41D", lwd = 1.5) +
+  scale_x_continuous(breaks = seq(1950, 2010, by = 15)) +
+  theme_dark() +
+  theme(
+    strip.text = element_text(size = 15),
+    axis.text = element_text(size = 10),
+    axis.title = element_text(size = 15)
+  )
+```
+
+## 
+
+::: question
+What am I doing?
+Are there mistakes?
+:::
+
+```{r, echo = TRUE, eval = FALSE}
+africa <- gapminder[gapminder$continent == "Africa", ]
+africa_mm <- max(africa$lifeExp) - min(africa$lifeExp)
+
+americas <- gapminder[gapminder$continent == "Americas", ]
+americas_mm <- max(americas$lifeExp) - min(americas$lifeExp)
+
+asia <- gapminder[gapminder$continent == "Asia", ]
+asia_mm <- max(asia$lifeExp) - min(africa$lifeExp)
+
+europe <- gapminder[gapminder$continent == "Europe", ]
+europe_mm <- max(europe$lifeExp) - min(europe$lifeExp)
+
+oceania <- gapminder[gapminder$continent == "Oceania", ]
+oceania_mm <- max(europe$lifeExp) - min(oceania$lifeExp)
+
+cbind(
+  continent = c("Africa", "Asias", "Europe", "Oceania"),
+  max_minus_min = c(africa_mm, americas_mm, asia_mm, europe_mm, oceania_mm)
+  )
+```
+
+```{r}
+countdown(
+  minutes = 1,
+  # Fanfare when it's over
+  play_sound = TRUE,
+  # Set timer theme to match solarized colors
+  color_border              = "#FFFFFF",
+  color_text                = "#7aa81e",
+  color_running_background  = "#7aa81e",
+  color_running_text        = "#FFFFFF",
+  color_finished_background = "#ffa07a",
+  color_finished_text       = "#FFFFFF",
+  font_size = "2em",
+  bottom = "-10%"
+  )
+```
+
+## Discussion
+
+::: question
+1.  What are the drawbacks of this code?
+
+2.  How would you do it instead?
+:::
+
+```{r}
+countdown(minutes = 1)
+```
+
+## An alternative solution
+
+```{r, echo = TRUE, eval=FALSE}
+gapminder |> 
+ group_by(continent) |> 
+ summarize(max_minus_min = max(lifeExp) - min(lifeExp))
+```
+
+. . .
+
+::: columns
+::: {.column width="50%"}
+`group_by` approach
+
+```{r}
+gapminder |> 
+ group_by(continent) |> 
+ summarize(max_minus_min = max(lifeExp) - min(lifeExp))
+```
+:::
+
+::: {.column width="50%"}
+previous approach
+
+```{r}
+library(gapminder)
+africa <- gapminder[gapminder$continent == "Africa", ]
+africa_mm <- max(africa$lifeExp) - min(africa$lifeExp)
+
+americas <- gapminder[gapminder$continent == "Americas", ]
+americas_mm <- max(americas$lifeExp) - min(americas$lifeExp)
+
+asia <- gapminder[gapminder$continent == "Asia", ]
+asia_mm <- max(asia$lifeExp) - min(africa$lifeExp)
+
+europe <- gapminder[gapminder$continent == "Europe", ]
+europe_mm <- max(europe$lifeExp) - min(europe$lifeExp)
+
+oceania <- gapminder[gapminder$continent == "Oceania", ]
+oceania_mm <- max(europe$lifeExp) - min(oceania$lifeExp)
+
+cbind(
+  continent = c("Africa", "Asias", "Europe", "Oceania"),
+  max_minus_min = c(africa_mm, americas_mm, asia_mm, europe_mm, oceania_mm)
+  )
+```
+:::
+:::
+
+## More iteration
+
+```{r, eval = FALSE, echo = TRUE}
+year <- 2017:2021
+location <- c("Orlando", "San Diego", "Austin", "San Francisco", "remote")
+
+conf <- rep_len("", length(year))
+for (i in seq_along(conf)) {
+ conf[i] <- paste0("The ", year[i], " RStudio Conference was in ", location[i], ".")
+}
+conf
+```
+
+. . .
+
+```{r, eval = TRUE, echo = FALSE}
+year <- 2017:2021
+location <- c("Orlando", "San Diego", "Austin", "San Francisco", "remote")
+
+conf <- rep_len("", length(year))
+for (i in seq_along(conf)) {
+ conf[i] <- paste0("The ", year[i], " RStudio Conference was in ", location[i], ".")
+}
+conf
+```
+
+<brshort>
+
+. . .
+
+::: question
+Can you think of other ways to do this?
+:::
+
+```{r}
+countdown(minutes = 0, seconds = 30, bottom = "-10%", right = "-10%")
+```
+
+## More iteration, cont.
+
+```{r, echo = TRUE}
+year <- 2017:2021
+location <- c("Orlando", "San Diego", "Austin", "San Francisco", "remote")
+```
+
+<brshort>
+
+```{r, echo = TRUE}
+paste0("The ", year, " RStudio Conference was in ", location, ".")
+```
+
+<brshort>
+
+. . .
+
+```{r, echo = TRUE}
+glue::glue("The {year} RStudio Conference was in {location}.")
+```
+
+. . .
+
+Some R functions are *vectorized*.
+
+# Introducing purrr
+
+## But what if you really need to iterate? {.center .center-x}
+
+<br>
+
+```{r, out.width="20%"}
+knitr::include_graphics("img/purrr-logo.png")
+```
+
+## `purrr`
+
+<https://purrr.tidyverse.org/>
+
+-   `purrr` enhances R's functional programming toolkit
+
+-   a "core" package in the tidyverse meta-package
+
+<br>
+
+```{r, eval = FALSE, echo = TRUE}
+install.packages("tidyverse") # <-- install purrr + much more
+library(tidyverse)            # <-- loads purrr + much more
+```
+
+<br>
+
+```{r, eval = FALSE, echo = TRUE}
+install.packages("purrr")     # <-- installs only purrr
+library(purrr)                # <-- loads only purrr
+```
+
+## `purrr` vs `apply`
+
+-   purrr is an alternative to "apply" functions
+
+-   `purrr::map()` ≈ `base::lapply()`
+
+![](img/tutorial-purrr-base.png)
+
+::: footer
+<https://jennybc.github.io/purrr-tutorial/bk01_base-functions.html>
+:::
+
+## Data
+
+```{r, echo=TRUE, eval=FALSE}
+library(purrr)
+library(repurrrsive)
+help(package = "repurrrsive")
+```
+
+::: columns
+::: {.column width="47%"}
+`got_chars`
+
+![](img/logo-got.jpg)
+:::
+
+::: {.column width="3%"}
+:::
+
+::: {.column width="50%"}
+`sw_people`, `sw_species`, etc.
+
+![](img/logo_star-wars.png)
+:::
+:::
+
+## Get comfortable with lists
+
+![](img/list-vector.png){.r-stretch}
+
+::: footer
+<https://adv-r.hadley.nz/vectors-chap.html#vectors-chap>
+:::
+
+::: notes
+Atomic vectors are familiar: logical, integer, double, character
+
+Vectors come in two flavours: atomic vectors and lists.
+They differ in terms of their elements' types: for atomic vectors, all elements must have the same type; for lists, elements can have different types.
+:::
+
+## Working with lists
+
+![](img/drink-water.gif)
+
+::: footer
+<https://media.giphy.com/media/Bqn8Z7xdPCFy0/giphy.gif>
+:::
+
+## Live coding
+
+1.  How many elements are in `got_chars`?
+
+2.  Who is the 9th person listed in `got_chars`?
+    What information is given for this person?
+
+3.  What is the difference between `got_chars[9]` and `got_chars[[9]]`?
+
+## List exploration
+
+```{r, echo = TRUE, eval = FALSE}
+str(x, list.len = ?, max.level = ?)
+
+x[i]
+
+x[[i]]
+
+str(x[[i]], ...)
+
+View(x) # in RStudio
+```
+
+## Subsetting lists
+
+![](img/train-1.png)
+
+. . .
+
+![](img/train-2.png)
+
+. . .
+
+`[` returns a smaller list; `[[` returns contents in the list
+
+::: footer
+<https://adv-r.hadley.nz/subsetting.html#subset-single>
+:::
+
+::: notes
+The train carrying objects is a list named x.
+x\[1\] is a train with the first car x\[\[1\]\] is the contents of car 1
+:::
+
+## Subsetting lists, cont. {visibility="hidden"}
+
+![](img/train-3.png)
+
+::: footer
+<https://adv-r.hadley.nz/subsetting.html#subset-single>
+:::
+
+::: notes
+got_chars\[\[0\]\] #\> Error in got_chars\[\[0\]\]: attempt to select less than one element in get1index <real>
+
+\[\[ is asking for one specific element either by position or by name and apparently it is implemented in such a way that errors for \[\[0\]\]
+
+got_chars\[0\] #\> list()
+
+whereas \[ is asking for a sub-list and apparently it is implemented in such a way that \[ is ok
+:::
+
+## Another list analogy
+
+::: columns
+::: {.column width="33%"}
+`x`
+
+![](img/pepper-1.jpg)
+:::
+
+::: {.column width="33%"}
+`x[i]`
+
+![](img/pepper-2.jpg)
+:::
+
+::: {.column width="33%"}
+`x[[i]]`
+
+![](img/pepper-3.jpg)
+:::
+:::
+
+::: footer
+<https://r4ds.had.co.nz/vectors.html?q=list#lists-of-condiments>
+:::
+
+::: notes
+If this pepper shaker is your list x, then, x\[1\] is a pepper shaker containing a single pepper packet.
+x\[2\] would look the same, but would contain the second packet.
+x\[1:2\] would be a pepper shaker containing two pepper packets.
+x\[\[1\]\] is the pepper packet.
+:::
+
+# Iterating with purrr
+
+## 
+
+<br> <br>
+
+::: r-fit-text
+`purrr::map(.x, .f, ...)`
+:::
+
+<br>
+
+. . .
+
+::: r-fit-text
+for every element of `.x` do `.f`
+:::
+
+##  {background-image="img/lego-rstats_101-6938.jpg"}
+
+<br>
+
+::: {.black-code .center-x}
+.x = minis
+:::
+
+::: footer
+:::
+
+##  {background-image="img/lego-rstats_102-6929.jpg"}
+
+<br>
+
+::: {.black-code .center-x}
+map(minis, antennate)
+:::
+
+::: footer
+:::
+
+## 
+
+::: r-fit-text
+for every element of `.x` do `.f`
+:::
+
+::: center-x
+![](img/map.png)
+:::
+
+::: footer
+Advanced R: Ch.
+9 Functionals
+
+<https://adv-r.hadley.nz/functionals.html>
+:::
+
+## `purrr::map(.x, .f, ...)`
+
+```{r, echo=TRUE, eval=FALSE}
+.x <- SOME VECTOR OR LIST
+out <- vector(mode = "list", length = length(.x))
+for (i in seq_along(out)) {
+ out[[i]] <- .f(.x[[i]])
+}
+out
+```
+
+. . .
+
+<br> `purrr::map()` is a nice way to write a for loop.
+
+. . .
+
+<br>
+
+*Someone has to write a for loop. It doesn't have to be you.*
+
+   *\~ Jenny Bryan*
+
+## Workflow demonstration
+
+How many aliases does each GoT character have?
+
+. . .
+
+`map(got_chars, .f = 🤷)`
+
+<br>
+
+. . .
+
+Workflow:
+
+1.  Do it for one element.
+2.  Find the general recipe.
+3.  Drop into `map()` to do for all.
+
+## 1. Do it for one element
+
+```{r, echo=TRUE, eval=TRUE}
+got_chars[[9]]
+```
+
+## 1. Do it for one element
+
+```{r, echo=TRUE, eval=TRUE}
+got_chars[[9]][["aliases"]]
+```
+
+. . .
+
+<br>
+
+```{r, echo=TRUE, eval=TRUE}
+length(got_chars[[9]][["aliases"]])
+```
+
+## 1. Do it for one element, again
+
+```{r, echo=TRUE, eval=FALSE}
+# Daenerys
+got_chars[[9]]
+got_chars[[9]][["aliases"]]
+length(got_chars[[9]][["aliases"]])
+```
+
+. . .
+
+<br>
+
+```{r, echo=TRUE, eval=FALSE}
+# Asha
+got_chars[[13]]
+got_chars[[13]][["aliases"]]
+length(got_chars[[13]][["aliases"]])
+```
+
+## 2. Find the general recipe.
+
+```{r, echo=TRUE, eval=FALSE}
+# Daenerys
+got_chars[[9]]
+got_chars[[9]][["aliases"]]
+length(got_chars[[9]][["aliases"]])
+```
+
+<br>
+
+`.x <- got_chars[[?]]`
+
+`length(.x[["aliases"]])`
+
+. . .
+
+<br>
+
+-   `.x` is a pronoun, like "it"
+-   `.x` means "the current element"
+
+## 3. Drop into map() to do for all.
+
+`.x <- got_chars[[?]]`
+
+`length(.x[["aliases"]])`
+
+```{r, echo=TRUE, eval=TRUE}
+map(got_chars, ~ length(.x[["aliases"]]))
+```
+
+## Anonymous functions
+
+```{r, echo=TRUE, eval=FALSE}
+map(got_chars, ~ length(.x[["aliases"]]))
+```
+
+<br>
+
+`~` is shortcut for anonymous functions supported in `purrr`
+
+<br>
+
+. . .
+
+Three ways of specifying anonymous functions:
+
+```{r, echo=TRUE, eval=FALSE}
+map(got_chars,           ~ length(.x[["aliases"]])) # supported in purrr
+map(got_chars, function(x) length( x[["aliases"]])) # supported in base R
+map(got_chars,        \(x) length( x[["aliases"]])) # supported R > 4.1.0
+```
+
+::: footer
+<https://adv-r.hadley.nz/functionals.html#purrr-shortcuts>
+:::
+
+## Your turn
+
+::: question
+How many \_\_\_ does each character have?
+:::
+
+<brshort>
+
+| Characters | Items               |
+|------------|---------------------|
+| got_chars  | titles, allegiances |
+| sw_people  | vehicles, starships |
+
+. . .
+
+<br>
+
+::: center-x
+`map(got_chars, ~ length(.x[["aliases"]]))`
+:::
+
+```{r}
+countdown(minutes = 5)
+```
+
+## Discussion {visibility="hidden"}
+
+::: question
+What are some challenges with this output?
+How could it be improved?
+:::
+
+```{r}
+countdown(minutes = 1)
+```
+
+::: notes
+1.  A list is returned.
+
+2.  We cannot see who is associated with each number of aliases.
+:::
+
+## Type specific map variants
+
+```{r, echo=TRUE, eval=TRUE}
+map_int(got_chars, ~ length(.x[["aliases"]]))
+```
+
+<br>
+
+. . .
+
+::: columns
+::: {.column width="30%"}
+`map_lgl()`
+
+`map_int()`
+
+`map_dbl()`
+
+`map_chr()`
+:::
+
+::: {.column width="70%"}
+<br>
+
+returns an atomic *vector*
+
+of the specified type
+:::
+:::
+
+## Your turn
+
+::: question
+Replace map() with type-specific map().
+:::
+
+```{r echo=TRUE, eval=FALSE}
+# What's each character's name?
+map(got_chars, ~.x[["name"]])
+map(sw_people, ~.x[["name"]])
+
+# What color is each SW character's hair?
+map(sw_people, ~ .x[["hair_color"]])
+
+# Is the GoT character alive?
+map(got_chars, ~ .x[["alive"]])
+
+# Is the SW character female?
+map(sw_people, ~ .x[["gender"]] == "female")
+
+# How heavy is each SW character?
+map(sw_people, ~ .x[["mass"]])
+```
+
+```{r}
+countdown(minutes = 3)
+```
+
+# More purrr
+
+## Review #1
+
+<br>
+
+### Lists can be awkward.
+
+### Lists can be necessary.
+
+### Get to know your list.
+
+## Review #2
+
+```{r, eval=FALSE, echo=TRUE}
+purrr::map(.x, .f, ...)
+```
+
+for every element of `.x` do `.f`
+
+<br>
+
+. . .
+
+```{r, eval=FALSE, echo=TRUE}
+map_int(got_chars, ~ length(.x[["aliases"]]))
+```
+
+quick anonymous functions via formula
+
+<br>
+
+. . .
+
+```{r, eval=FALSE, echo=TRUE}
+map_lgl(sw_people, ~ .x[["gender"]] == "female")
+map_int(got_chars, ~ length(.x[["aliases"]]))
+map_chr(got_chars, ~ .x[["name"]])
+```
+
+type specific map variants
+
+## We extract by name a lot
+
+<br>
+
+```{r, eval=FALSE, echo=TRUE}
+# What's each character's name?
+map(got_chars, ~.x[["name"]])
+
+# What color is each SW character's hair?
+map(sw_people, ~ .x[["hair_color"]])
+
+# Is the GoT character alive?
+map(got_chars, ~ .x[["alive"]])
+
+# How heavy is each SW character?
+map(sw_people, ~ .x[["mass"]])
+```
+
+## `.f` specification & shortcuts
+
+::: columns
+::: {.column width="55%"}
+<br>
+
+<brshort>
+
+```{r, eval=FALSE, echo=TRUE}
+get_name <- function(x){ x[["name"]] }
+map_chr(got_chars, get_name)
+```
+
+<br>
+
+```{r, eval=FALSE, echo=TRUE}
+map_chr(got_chars, ~ .x[["name"]])
+```
+
+<br>
+
+```{r, eval=FALSE, echo=TRUE}
+map_chr(got_chars, "name")
+```
+
+<br>
+
+```{r, eval=FALSE, echo=TRUE}
+map_chr(got_chars, 3)
+```
+:::
+
+::: {.column width="5%"}
+:::
+
+::: {.column width="40%"}
+`.f` accepts
+
+<brshort>
+
+named functions
+
+<br>
+
+anonymous functions
+
+<br>
+
+a name
+
+<br>
+
+a position
+:::
+:::
+
+## .f shortcuts {visibility="hidden"}
+
+```{r, eval=FALSE, echo=TRUE}
+get_name <- function(x){ x[["name"]] }
+map_chr(got_chars, get_name)
+```
+
+`.f` accepts named functions
+
+. . .
+
+<brshort>
+
+```{r, eval=FALSE, echo=TRUE}
+map_chr(got_chars, ~ .x[["name"]])
+```
+
+`.f` accepts anonymous functions
+
+. . .
+
+<brshort>
+
+```{r, eval=FALSE, echo=TRUE}
+map_chr(got_chars, "name")
+```
+
+`.f` accepts a name
+
+<brshort>
+
+. . .
+
+```{r, eval=FALSE, echo=TRUE}
+map_chr(got_chars, 3)
+```
+
+`.f` accepts a position
+
+##  {background-image="img/lego-rstats_103-8826.jpg"}
+
+<br>
+
+::: {.black-code .center-x}
+.x = minis
+:::
+
+::: footer
+:::
+
+##  {background-image="img/lego-rstats_106-8820.jpg"}
+
+<br>
+
+::: {.black-code .center-x}
+map(minis, "pants")
+:::
+
+::: footer
+:::
+
+## Your turn
+
+::: question
+1.  Explore a GoT or SW list and find a new element to look at.
+
+2.  Extract it across the whole list with name and position shortcuts for .f.
+
+3.  Use map_TYPE() to get an an atomic vector as output.
+:::
+
+```{r, eval = FALSE, echo = TRUE}
+# GoT
+map_??(got_chars, ??)
+
+# Star Wars
+map_??(sw_people, ??)
+map_??(sw_vehicles, ??)
+map_??(sw_species, ??)
+# etc.
+```
+
+```{r}
+countdown(minutes = 5)
+```
+
+## Common problem
+
+<br>
+
+::: r-fit-text
+I'm using map_TYPE() but some
+
+individual elements aren't of length 1.
+:::
+
+<br>
+
+::: r-fit-text
+They are absent or have length \> 1.
+:::
+
+## Solutions
+
+<br>
+
+### Missing elements?
+
+Specify a `.default` value.
+
+<br>
+
+. . .
+
+### Elements of length \> 1?
+
+You can't make an atomic vector.`*`
+
+Get happy with a list or list-column.
+
+Or pick one element, e.g., the first.
+
+<br>
+
+::: footer
+`*` You can, if you are willing to `flatten()`.
+:::
+
+## `.default` value
+
+```{r, eval=TRUE, echo=TRUE}
+map(sw_vehicles, "pilots", .default = NA)
+```
+
+## select first element
+
+```{r, eval=TRUE, echo=TRUE}
+map_chr(sw_vehicles, list("pilots", 1), .default = NA)
+```
+
+## more `.f` shortcuts
+
+<br>
+
+::: columns
+::: {.column width="55%"}
+<br>
+
+<br>
+
+```{r, eval=FALSE, echo=TRUE}
+map(got_chars, c(14, 1)) 
+```
+
+<br>
+
+<brshort>
+
+```{r, eval=FALSE, echo=TRUE}
+map(sw_vehicles, list("pilots", 1))
+```
+:::
+
+::: {.column width="5%"}
+:::
+
+::: {.column width="40%"}
+`.f` accepts
+
+<br>
+
+vector of positions
+
+<br>
+
+list of names and positions
+:::
+:::
+
+## Another challenge
+
+<br>
+
+```{r, echo = TRUE, eval = TRUE}
+# create readable output
+map_lgl(got_chars, "alive")
+```
+
+<br>
+
+### Who? 🙄
+
+## Named lists \>\>\> unnamed lists
+
+::: columns
+::: {.column width="75%"}
+```{r, echo = TRUE, eval = TRUE}
+# retrieve names of GoT characters
+got_names <- map_chr(got_chars, "name")
+got_names[1:3]
+```
+
+<brshort>
+
+```{r, echo = TRUE, eval = TRUE}
+# create a named list
+got_chars_named <- set_names(got_chars, got_names)
+str(got_chars_named[1:3], max.level = 1)
+```
+
+<brshort>
+
+```{r, echo = TRUE, eval = TRUE}
+# create readable output
+map_lgl(got_chars_named, "alive")[1:3]
+```
+:::
+
+::: {.column width="5%"}
+:::
+
+::: {.column width="20%"}
+<br>
+
+Names
+
+propagate
+
+in `purrr`
+
+pipelines.
+
+Set them
+
+early and
+
+enjoy!
+:::
+:::
+
+## Example: name propagation
+
+With `tibble::enframe()`, a named list converts to a data frame with names & list-column.
+
+```{r, echo=TRUE, eval=TRUE}
+allegiances <- map(got_chars_named, "allegiances")
+tibble::enframe(allegiances, value = "allegiances")
+```
+
+::: footer
+For more on list columns, see rstudio::conf(2018) Data Rectangling by Jenny Bryan
+
+<https://www.rstudio.com/resources/rstudioconf-2018/data-rectangling/>
+:::
+
+## Review #3
+
+```{r, echo=TRUE, eval=FALSE}
+got_names <- map_chr(got_chars, "name")
+got_chars_named <- set_names(got_chars, got_names)
+```
+
+Set list names for a happier life.
+
+. . .
+
+<brshort>
+
+```{r, echo=TRUE, eval=FALSE}
+map_chr(got_chars, "name")
+map_chr(got_chars, 3)
+map_chr(got_chars, c(3, 1))
+map_chr(got_chars, list("name", 1))
+map_chr(got_chars, ~ .x[["name"]])
+```
+
+There are many ways to specify `.f`.
+
+. . .
+
+<brshort>
+
+```{r, echo=TRUE, eval=FALSE}
+map(sw_vehicles, "pilots", .default = NA)
+map_chr(sw_vehicles, list("pilots", 1), .default = NA)
+```
+
+`.default` is useful for missing things.
+
+## Your turn
+
+::: question
+Create a named copy of a GoT or SW list with set_names().
+Find an element with tricky presence/absence or length.
+Extract it many ways.
+:::
+
+::: columns
+::: {.column width="45%"}
+::: small
+Extraction methods:
+
+-   by name
+
+-   by position
+
+-   by `list("name", pos)`
+
+-   by `c(pos, pos)`
+
+-   use `.default` for missing data
+
+-   use `map_TYPE()` to coerce output to atomic vector
+:::
+:::
+
+::: {.column width="5%"}
+:::
+
+::: {.column width="50%"}
+::: small
+Finish?
+Try one of these:
+
+1.  Which SW film has the most characters?
+2.  Which SW species has the most possible eye colors?
+3.  Which GoT character has the most allegiances? Aliases? Titles?
+4.  Which GoT character has been played by multiple actors?
+:::
+:::
+:::
+
+```{r}
+countdown(minutes = 7, top = "-10%", right = "-10%")
+```
+
+::: footer
+:::
+
+# Inspiration for your future purrr work
+
+## Additional arguments
+
+<br>
+
+```{r, eval = TRUE, echo = TRUE}
+books <- map(got_chars_named, "books") 
+books[1:2]
+```
+
+. . .
+
+<br>
+
+```{r, eval = TRUE, echo = TRUE}
+map_chr(books[1:2], ~ paste(.x, collapse = ", ")) 
+```
+
+::: footer
+<https://adv-r.hadley.nz/functionals.html#passing-arguments>
+:::
+
+## `map(.x, .f, ...)`
+
+<br>
+
+```{r, eval = TRUE, echo = TRUE}
+books <- map(got_chars_named, "books") 
+books[1:2]
+```
+
+<br>
+
+```{r, eval = TRUE, echo = TRUE}
+map_chr(books[1:2], paste, collapse = ", ")
+```
+
+::: footer
+<https://adv-r.hadley.nz/functionals.html#passing-arguments>
+:::
+
+::: notes
+any arguments that come after f in the call to map() are inserted after the data in individual calls to f()
+:::
+
+## Passing arguments
+
+```{r, eval=FALSE, echo=TRUE}
+# map(.x, .f, ...)
+map_chr(books[1:2], paste, collapse = ", ")
+```
+
+<br>
+
+![](img/map-arg.png)
+
+::: footer
+<https://adv-r.hadley.nz/functionals.html#passing-arguments>
+:::
+
+::: notes
+any arguments that come after f in the call to map() are inserted after the data in individual calls to f()
+:::
+
+## 
+
+### So, yes,
+
+### there are many ways to specify `.f`.
+
+```{r, eval=FALSE, echo = TRUE}
+map(got_chars, ~ length(.x[["aliases"]]))
+map_chr(got_chars, "name")
+map_chr(books, paste, collapse = ", ")
+map(sw_vehicles, list("pilots", 1))
+```
+
+![](img/tutorial-purr.png){width="70%"}
+
+::: footer
+https://jennybc.github.io/purrr-tutorial/ls03_map-function-syntax.html#load_packages
+:::
+
+## Walk
+
+```{r, echo=TRUE, eval=TRUE}
+countries <- c("Argentina", "Brazil")
+gap_small <- gapminder  |> 
+ filter(country %in% countries & year > 2000)
+gap_small
+```
+
+<brshort>
+
+. . .
+
+::: columns
+::: {.column width="65%"}
+```{r, echo=TRUE, eval=FALSE}
+write_one <- function(x) {
+ filename <- paste0(x, ".csv")
+ dataset <- filter(gap_small, country == x)
+ write_csv(dataset, filename)
+}
+```
+
+<brshort>
+
+```{r, echo=TRUE, eval=FALSE}
+walk(countries, write_one)
+list.files(pattern = "*.csv")
+```
+
+<brshort>
+
+```{r, echo=TRUE, eval=FALSE}
+#> [1] "Argentina.csv" "Brazil.csv" 
+```
+:::
+
+::: {.column width="5%"}
+:::
+
+::: {.column width="30%"}
+`walk()` is `map()`
+
+but
+
+returns no output
+:::
+:::
+
+## 
+
+### `map_dfr()` rowbinds a list of data frames
+
+<br>
+
+```{r, echo=TRUE, eval=FALSE}
+csv_files <- list.files(pattern = "*.csv")
+csv_files
+```
+
+<brshort>
+
+```{r, echo=TRUE, eval=FALSE}
+#> [1] "Argentina.csv" "Brazil.csv" 
+```
+
+<br>
+
+```{r, echo=TRUE, eval=FALSE}
+map_dfr(csv_files, ~ read_csv(.x))
+```
+
+<brshort>
+
+```{r,echo=FALSE, eval = TRUE}
+gap_small |>  
+  mutate(across(c(country, continent), as.character)) |>  
+  mutate_if(is.numeric, as.double)
+```
+
+## `map_dfr()` smush
+
+![](img/asmae_smush.png)
+
+::: footer
+https://twitter.com/asmae_toumi/status/1364407122268729347
+:::
+
+## 
+
+<br>
+
+### mapping over
+
+### 2 or more things
+
+### in parallel
+
+##  {background-image="img/map2_hair.jpg"}
+
+<br>
+
+::: {.black-code .center-x}
+.y = hair
+
+.x = minis
+:::
+
+::: footer
+:::
+
+##  {background-image="img/lego-rstats_103-8826.jpg"}
+
+<br>
+
+::: {.black-code-smaller .center-x}
+map2(minis, hair, enhair)
+:::
+
+::: footer
+:::
+
+##  {background-image="img/map2_weapons.jpg"}
+
+<br>
+
+<brshort>
+
+::: {.black-code .center-x}
+.y = weapons
+
+.x = minis
+:::
+
+::: footer
+:::
+
+##  {background-image="img/lego-rstats_104-8838.jpg"}
+
+<br>
+
+::: {.black-code-smaller .center-x}
+map2(minis, weapons, arm)
+:::
+
+::: footer
+:::
+
+##  {background-image="img/lego-rstats_104-8838.jpg"}
+
+<brshort>
+
+::: black-code-smaller
+minis \|\>
+
+   map2(hair, enhair) \|\>
+
+   map2(weapons, arm)
+:::
+
+::: footer
+:::
+
+## `map2()`
+
+iterates over two vectors in parallel.
+
+![](img/map2-arg.png)
+
+::: footer
+<https://adv-r.hadley.nz/functionals.html#map2>
+:::
+
+##  {background-image="img/lego-rstats_124-8843.jpg"}
+
+::: black-code-smallest
+df \<- tibble(pants, torso, head)
+
+embody \<- function(pants, torso, head)
+
+   insert(insert(pants, torso), head)
+:::
+
+::: footer
+:::
+
+##  {background-image="img/embody.png"}
+
+::: {.black-code .center-x}
+pmap(df, embody)
+:::
+
+::: footer
+:::
+
+## `pmap()`
+
+supply a list to iterate over any number of arguments in parallel.
+
+![](img/pmap.png)
+
+::: footer
+<https://adv-r.hadley.nz/functionals.html#pmap>
+:::
+
+##  {background-image="img/map_dfr.png"}
+
+::: black-code-smallest
+map_dfr(minis, \`\[\`,
+
+   c("pants", "torso", "head")
+:::
+
+::: footer
+:::
+
+## For more
+
+### [rstd.io/row-work](rstd.io/row-work)
+
+![](img/tutorial-row.png)
+
+## Map guide
+
+![](img/map-guide.png)
+
+::: footer
+<https://adv-r.hadley.nz/functionals.html#map-variants>
+:::
+
+##  {background-image="img/unsplash.jpg"}
+
+### Go forth,
+
+### and explore the world of purrr!
+
+::: footer
+Photo from Andriyko Podilnyk on unsplash
+
+<https://unsplash.com/photos/RCfi7vgJjUY>
+:::
