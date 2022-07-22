@@ -5,6 +5,8 @@ footer:  "[Iterating well with purrr](https://github.com/rstats-wtf/wtf-purrr-sl
 logo: "img/wtf-logo-square-transparent.png"
 format: 
   revealjs: 
+    height: 900
+    width: 1600
     theme: [night, slides.scss]
     highlight-style: a11y
     transition: fade
@@ -15,6 +17,21 @@ execute:
   freeze: auto
 ---
 
+# Agenda
+
+Introduction
+
+Syntax aside
+
+Iterating without purrr
+
+Introducing purrr
+
+Iterating with purrr
+
+More purrr
+
+Inspiration for your future purrr work
 
 # Introduction
 
@@ -43,7 +60,7 @@ This work is licensed under a [Creative Commons Attribution-ShareAlike 4.0 Inter
 `r fontawesome::fa("check", fill = fa_fill)` R installed?
 Pretty recent?
 
-     Current version 4.2.0
+     Recommended ≥ 4.2.0
 
 `r fontawesome::fa("check", fill = fa_fill)` RStudio installed?
 
@@ -514,20 +531,20 @@ whereas \[ is asking for a sub-list and apparently it is implemented in such a w
 
 ## Another list analogy
 
-::: columns
+::: columns 
 ::: {.column width="33%"}
 `x`
 
 ![](img/pepper-1.jpg)
 :::
 
-::: {.column width="33%"}
+::: {.column .fragment width="33%"}
 `x[i]`
 
 ![](img/pepper-2.jpg)
 :::
 
-::: {.column width="33%"}
+::: {.column .fragment width="33%"}
 `x[[i]]`
 
 ![](img/pepper-3.jpg)
