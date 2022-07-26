@@ -531,7 +531,7 @@ whereas \[ is asking for a sub-list and apparently it is implemented in such a w
 
 ## Another list analogy
 
-::: columns 
+::: columns
 ::: {.column width="33%"}
 `x`
 
@@ -719,8 +719,9 @@ length(got_chars[[9]][["aliases"]])
 
 <br>
 
--   `.x` is a pronoun, like "it"
--   `.x` means "the current element"
+`.x` is a pronoun, like "it"
+
+`.x` means "the current element"
 
 ## 3. Drop into map() to do for all.
 
@@ -959,6 +960,8 @@ map_chr(got_chars, 3)
 <brshort>
 
 named functions
+
+<br>
 
 <br>
 
